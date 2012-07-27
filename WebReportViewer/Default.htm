@@ -1,0 +1,116 @@
+﻿<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+    <title></title>
+    <script type="text/javascript" src="Scripts/jquery-1.5.1.js"></script>
+    <script type="text/javascript" src="Scripts/ReportViewer/AjaxReportViewer.js"></script>
+    <script type="text/javascript">
+        var pageContentRequested;
+        var currentPage;
+        var maxPage;
+        var documentId;
+        var client;
+
+        function checkError(response, status) {
+            if(status === "error") {
+                alert(response.Message)
+                return true;
+            }
+            return false;
+        };
+
+        function createDocument() {
+            pageContentRequested = false;
+            currentPage = 0;
+            maxPage = 0;
+
+            //var reportName = "WebApplication3.XtraReport1, WebApplication3";
+            var reportName = "XtraReportsDemos.HugeAmountRecords.ReportWeb";
+            client = new ReportViewerClient("ReportService1.svc/ajax");
+            client.getReportInformation(reportName, function(response, result, status) {
+                if(checkError(response, status)) {
+                    return;
+                }
+                client.startBuild(reportName, [], function(response, result, status) {
+                    if(checkError(response, status)) {
+                        return;
+                    }
+                    //client.getBuildStatus(result, )
+                    documentId = result;
+                    getBuildStatusTimer(client);
+                });
+            });
+        }
+
+        function getBuildStatusTimer(client) {
+            client.getBuildStatus(documentId, function(response, result, status) {
+                if(checkError(response, status)) {
+                    return;
+                }
+                if(result.PageCount !== undefined) {
+                    maxPage = result.PageCount;
+                }
+                if(result.Status === TaskStatus.Fault) {
+                    alert(JSON.stringify(result.Fault));
+                    return;
+                }
+                if(result.Status === TaskStatus.Complete) {
+                    loadCurrentPage(client);
+                    return;
+                }
+                
+                if(!pageContentRequested && result.PageCount > 0) {
+                    pageContentRequested = true;
+                    loadCurrentPage(client);
+                }
+                
+                updatePageInfo(result.ProgressPosition);
+                window.setTimeout(function() { getBuildStatusTimer(client); }, 500);
+            });
+        }
+        
+        function updatePageInfo(progressPosition) {
+            if(progressPosition === undefined) {
+                progressPosition = 100;
+            }
+            $("#pageInfo").text(progressPosition + "%; Page " + (currentPage + 1) + " of " + maxPage);
+        }
+
+        function loadCurrentPage(client) {
+            client.getPage(documentId, currentPage, PageCompatibility.HTML, function(response, result, status) {
+                $("#pageContent").html(result);
+            });
+        }
+        
+        function prevPage() {
+            if(currentPage === 0) {
+                return;
+            }
+            currentPage--;
+            updatePageInfo();
+            loadCurrentPage(client);
+        }
+        
+        function nextPage() {
+            if(currentPage >= maxPage) {
+                return;
+            }
+            currentPage++;
+            updatePageInfo();
+            loadCurrentPage(client);
+        }
+    </script>
+</head>
+<body>
+    <form id="form1" runat="server">
+    <div>
+        <input onclick="createDocument()" type="button" value="Create Document" />
+        <input onclick="prevPage()" type="button" value="<" />
+        <input onclick="nextPage()" type="button" value=">" />
+        <span id="pageInfo"></span>
+        
+        <div id="pageContent"></div>
+    </div>
+    </form>
+</body>
+</html>
